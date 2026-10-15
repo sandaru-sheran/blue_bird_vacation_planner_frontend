@@ -1,13 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { AuthService } from '@/src/services/auth.service'
 import { DestinationService } from '@/src/services/destination.service'
 import { DiningService } from '@/src/services/dining.service'
 import { RouteService } from '@/src/services/route.service'
 import { WeatherService, type WeatherResponse } from '@/src/services/weather.service'
 import type { DayPlanRouteResponse, Destination as ApiDestination, DiningInsight } from '@/types/backend-api'
+import AdminDrawer from './admin/AdminDrawer'
 
 type Destination = {
   id: number
@@ -31,9 +31,18 @@ type HotelStay = {
   customNote: string
 }
 
+type DiningInsightWithCoordinates = DiningInsight & {
+  latitude?: number
+  longitude?: number
+  lat?: number
+  lng?: number
+  coordinates?: { lat: number; lng: number } | [number, number]
+}
+
 type LeafletMap = {
   setView: (center: [number, number], zoom: number) => LeafletMap
   fitBounds: (bounds: unknown, options?: { padding: [number, number] }) => void
+  invalidateSize: () => LeafletMap
   remove: () => void
 }
 
@@ -137,6 +146,61 @@ function toCardDestination(destination: ApiDestination): Destination {
   }
 }
 
+function getImageCandidates(destination: Destination): string[] {
+  return [destination.image, ...destination.gallery].filter((image, index, images) => Boolean(image) && images.indexOf(image) === index)
+}
+
+function getUrlDimensions(url: string): { width: number; height: number } | null {
+  const query = url.split('?')[1]?.split('#')[0] || ''
+  const params = new URLSearchParams(query)
+  const width = Number(params.get('w') || params.get('width'))
+  const height = Number(params.get('h') || params.get('height'))
+  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? { width, height } : null
+}
+
+function getInitialImage(candidates: string[]): string {
+  return candidates.find((image) => {
+    const dimensions = getUrlDimensions(image)
+    return dimensions && dimensions.width >= dimensions.height
+  }) || candidates[0] || ''
+}
+
+function findHorizontalImage(candidates: string[]): Promise<string | null> {
+  return Promise.all(candidates.map((src) => new Promise<{ src: string; horizontal: boolean }>((resolve) => {
+    const image = new window.Image()
+    image.onload = () => resolve({ src, horizontal: image.naturalWidth >= image.naturalHeight })
+    image.onerror = () => resolve({ src, horizontal: false })
+    image.src = src
+  }))).then((results) => results.find((result) => result.horizontal)?.src || null)
+}
+
+function DestinationMainImage({ destination }: { destination: Destination }) {
+  const candidates = useMemo(() => getImageCandidates(destination), [destination])
+  const [src, setSrc] = useState(() => getInitialImage(candidates))
+
+  useEffect(() => {
+    let active = true
+    if (candidates.length > 1) {
+      findHorizontalImage(candidates).then((horizontalImage) => {
+        if (active && horizontalImage) setSrc(horizontalImage)
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [candidates])
+
+  const handleLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    if (event.currentTarget.naturalHeight > event.currentTarget.naturalWidth && candidates.length > 1) {
+      findHorizontalImage(candidates).then((horizontalImage) => {
+        if (horizontalImage) setSrc(horizontalImage)
+      })
+    }
+  }
+
+  return <img src={src} alt={`${destination.city}, ${destination.country}`} onLoad={handleLoad} />
+}
+
 function getDateString(date: Date): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -155,12 +219,122 @@ function formatSelectedDate(date: string): string {
   return `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][month - 1]} ${day}, ${year}`
 }
 
-function weatherIcon(condition: string): string {
-  const normalized = condition.toLowerCase()
-  if (normalized.includes('rain') || normalized.includes('storm')) return '☂'
-  if (normalized.includes('cloud') || normalized.includes('overcast')) return '☁'
-  if (normalized.includes('snow')) return '❄'
-  return '☀'
+function getMeteoconsIcon(condition: string): string {
+  const normalized = (condition || '').trim().toLowerCase()
+
+  if (!normalized) return 'clear-day'
+
+  if (normalized.includes('thunder') || normalized.includes('lightning') || normalized.includes('storm')) {
+    if (normalized.includes('rain') || normalized.includes('shower')) return 'thunderstorms-rain'
+    if (normalized.includes('snow')) return 'thunderstorms-snow'
+    return 'thunderstorms'
+  }
+
+  if (normalized.includes('snow') || normalized.includes('blizzard') || normalized.includes('flurries')) {
+    return 'snow'
+  }
+
+  if (normalized.includes('sleet') || normalized.includes('ice') || normalized.includes('freezing')) {
+    return 'sleet'
+  }
+
+  if (normalized.includes('hail')) {
+    return 'hail'
+  }
+
+  if (normalized.includes('drizzle')) {
+    return 'drizzle'
+  }
+
+  if (normalized.includes('rain') || normalized.includes('shower')) {
+    if (normalized.includes('partly') || normalized.includes('light') || normalized.includes('sun')) {
+      return 'partly-cloudy-day-rain'
+    }
+    if (normalized.includes('overcast') || normalized.includes('heavy')) {
+      return 'overcast-rain'
+    }
+    return 'rain'
+  }
+
+  if (normalized.includes('fog')) {
+    return 'fog'
+  }
+
+  if (normalized.includes('mist')) {
+    return 'mist'
+  }
+
+  if (normalized.includes('haze')) {
+    return 'haze'
+  }
+
+  if (normalized.includes('dust') || normalized.includes('sand') || normalized.includes('smoke')) {
+    return 'dust'
+  }
+
+  if (normalized.includes('wind') || normalized.includes('breeze') || normalized.includes('gale')) {
+    return 'wind'
+  }
+
+  if (normalized.includes('overcast')) {
+    return 'overcast'
+  }
+
+  if (
+    normalized.includes('partly') ||
+    normalized.includes('scattered') ||
+    normalized.includes('broken') ||
+    normalized.includes('mainly clear') ||
+    normalized.includes('few clouds')
+  ) {
+    return 'partly-cloudy-day'
+  }
+
+  if (normalized.includes('cloud')) {
+    return 'cloudy'
+  }
+
+  if (normalized.includes('clear') || normalized.includes('sun') || normalized.includes('fair')) {
+    return 'clear-day'
+  }
+
+  return 'clear-day'
+}
+
+export function getMeteoconsUrl(condition: string): string {
+  const iconName = getMeteoconsIcon(condition)
+  const localIcon = iconName === 'clear-day'
+    ? 'sun'
+    : iconName.includes('rain') || iconName === 'drizzle' || iconName === 'thunderstorms'
+      ? 'cloud-rain'
+      : iconName === 'partly-cloudy-day'
+        ? 'cloud-sun'
+        : 'cloud'
+
+  return `/weather-icons/${localIcon}.svg`
+}
+
+function WeatherIcon({ condition, size = 68, className = '' }: { condition: string; size?: number; className?: string }) {
+  const iconUrl = getMeteoconsUrl(condition)
+
+  return (
+    <span className={`weather-icon-wrapper ${className}`.trim()}>
+      <img
+        src={iconUrl}
+        alt={condition || 'Weather condition'}
+        width={size}
+        height={size}
+        className="weather-icon"
+        style={{
+          width: size,
+          height: size,
+          objectFit: 'contain',
+          display: 'block',
+        }}
+        loading="lazy"
+      />
+    </span>
+  )
 }
 
 function haversineDistance(latitudeOne: number, longitudeOne: number, latitudeTwo: number, longitudeTwo: number): number {
@@ -189,10 +363,53 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
 
+function useTransparentBirdImage() {
+  const [transparentBirdUrl, setTransparentBirdUrl] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    const image = new Image()
+    image.src = '/bluebird-art.jpg'
+    image.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = image.naturalWidth
+      canvas.height = image.naturalHeight
+      const context = canvas.getContext('2d')
+      if (!context) return
+
+      context.drawImage(image, 0, 0)
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+      for (let index = 0; index < imageData.data.length; index += 4) {
+        const red = imageData.data[index]
+        const green = imageData.data[index + 1]
+        const blue = imageData.data[index + 2]
+        const blueDominance = blue - Math.max(red, green)
+        const neutralRange = Math.max(red, green, blue) - Math.min(red, green, blue)
+
+        if (neutralRange < 18 || blueDominance < 8) {
+          imageData.data[index + 3] = 0
+        } else {
+          imageData.data[index + 3] = Math.min(255, Math.round((blueDominance - 8) * 18))
+        }
+      }
+
+      context.putImageData(imageData, 0, 0)
+      if (!cancelled) setTransparentBirdUrl(canvas.toDataURL('image/png'))
+    }
+
+    return () => {
+      cancelled = true
+      image.onload = null
+    }
+  }, [])
+
+  return transparentBirdUrl
+}
+
 function BirdLogo() {
   return (
     <div className="brand-mark" aria-label="Bluebird logo">
-      <svg viewBox="0 0 44 44" role="img">
+      <svg viewBox="0 0 44 44" role="img" aria-label="Bluebird">
         <path d="M8 26c7-.4 8.6-4.7 10-9.8 3 3.5 6.5 5.3 10.8 4.8 3.2-.3 5.4-2 7.7-4.8-.2 7-3.2 12.6-9.2 16.2-5.6 3.4-12 3.5-18.8 1.4 3.3-1 5.5-2.4 7.2-4.4-3.1.2-5.6-1-7.7-3.4Z" fill="currentColor"/>
         <path d="M29 20c.5-4 2.3-6.7 5.5-8.2-.6 2.2-.5 4 .6 5.5" fill="currentColor"/>
       </svg>
@@ -201,7 +418,7 @@ function BirdLogo() {
 }
 
 export default function App() {
-  const router = useRouter()
+  const transparentBirdUrl = useTransparentBirdImage()
   const [destinations, setDestinations] = useState<Destination[]>(dummyDestinations)
   const [selectedDestinationIds, setSelectedDestinationIds] = useState<number[]>([])
   const [search, setSearch] = useState('')
@@ -222,10 +439,20 @@ export default function App() {
   const [password, setPassword] = useState('')
   const [isLoginLoading, setIsLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
+  const [isAdminSidebarExpanded, setIsAdminSidebarExpanded] = useState(false)
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false)
   const [bufferMinutes, setBufferMinutes] = useState<Record<number, number>>({})
   const [nearbyDining, setNearbyDining] = useState<Record<number, DiningInsight[]>>({})
   const [selectedDining, setSelectedDining] = useState<Record<number, number>>({})
+  const [diningGallery, setDiningGallery] = useState<{ restaurantName: string; images: string[]; index: number } | null>(null)
   const [hotelStays, setHotelStays] = useState<Record<number, HotelStay>>({})
+  const fetchedDiningIdsRef = useRef<Set<string | number>>(new Set())
+  const galleryDragRef = useRef<{ gallery: HTMLDivElement | null; startX: number; startScrollLeft: number; dragged: boolean }>({
+    gallery: null,
+    startX: 0,
+    startScrollLeft: 0,
+    dragged: false,
+  })
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSelectedDate((current) => current || getDateString(new Date())), 0)
@@ -283,9 +510,72 @@ export default function App() {
   const toggle = (id: number) =>
     setSelectedDestinationIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
 
+  const handleGalleryPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gallery = event.currentTarget
+    galleryDragRef.current = {
+      gallery,
+      startX: event.clientX,
+      startScrollLeft: gallery.scrollLeft,
+      dragged: false,
+    }
+    gallery.setPointerCapture(event.pointerId)
+  }
+
+  const handleGalleryPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = galleryDragRef.current
+    if (drag.gallery !== event.currentTarget || !galleryDragRef.current.gallery) return
+    const distance = event.clientX - drag.startX
+    if (Math.abs(distance) > 3) {
+      drag.dragged = true
+      event.currentTarget.classList.add('dragging')
+    }
+    if (drag.dragged) {
+      event.currentTarget.scrollLeft = drag.startScrollLeft - distance
+      event.preventDefault()
+    }
+  }
+
+  const handleGalleryPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = galleryDragRef.current
+    if (drag.gallery === event.currentTarget && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    event.currentTarget.classList.remove('dragging')
+    window.setTimeout(() => {
+      galleryDragRef.current = { gallery: null, startX: 0, startScrollLeft: 0, dragged: false }
+    }, 0)
+  }
+
   const selectedDestinations = selectedDestinationIds
     .map((id) => destinations.find((destination) => destination.id === id))
     .filter((destination): destination is Destination => destination !== undefined)
+
+  const selectedPlaceIds = selectedDestinationIds.join(',')
+  useEffect(() => {
+    if (step !== 2) return
+    let cancelled = false
+    const placeIds = selectedPlaceIds.split(',').filter(Boolean).map(Number)
+
+    Promise.all(placeIds.map(async (placeId) => {
+      if (fetchedDiningIdsRef.current.has(placeId) || nearbyDining[placeId]) return null
+      fetchedDiningIdsRef.current.add(placeId)
+      try {
+        const results = await DiningService.getNearby(placeId)
+        return [placeId, results.length > 0 ? results : fallbackDiningByDestination[placeId] ?? []] as const
+      } catch {
+        return [placeId, fallbackDiningByDestination[placeId] ?? []] as const
+      }
+    })).then((results) => {
+      if (!cancelled) {
+        const fetchedResults = results.filter((result): result is readonly [number, DiningInsight[]] => result !== null)
+        if (fetchedResults.length > 0) {
+          setNearbyDining((current) => ({ ...current, ...Object.fromEntries(fetchedResults) }))
+        }
+      }
+    })
+
+    return () => { cancelled = true }
+  }, [selectedPlaceIds, step])
 
   const createFallbackRoute = (selected: Destination[], averageBufferSeconds: number): DayPlanRouteResponse => {
     const segmentDetails = selected.slice(0, -1).map((from, index) => {
@@ -370,7 +660,8 @@ export default function App() {
       setIsLoginModalOpen(false)
       setUsername('')
       setPassword('')
-      router.push('/admin')
+      setIsAdminAuthenticated(true)
+      setIsAdminSidebarExpanded(true)
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Unable to log in. Please try again.')
     } finally {
@@ -380,7 +671,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className="sidebar" style={{ visibility: isAdminSidebarExpanded ? 'hidden' : 'visible' }}>
         <div className="brand"><BirdLogo /><span>bluebird</span></div>
         <nav>
           <p className="nav-label">Workspace</p>
@@ -388,37 +679,117 @@ export default function App() {
           <button className={`nav-item ${step === 2 ? 'active' : ''}`} disabled={selectedDestinationIds.length < 2} onClick={() => setStep(2)}><Icon name="grid" />2. Stays &amp; Dining</button>
           <button className={`nav-item ${step === 3 ? 'active' : ''}`} disabled={!routeResult} onClick={() => setStep(3)}><Icon name="calendar" />3. Route &amp; Itinerary</button>
         </nav>
-        <div className="sidebar-bottom">
-          <button className="admin-access-link" onClick={() => { setIsLoginModalOpen(true); setLoginError(null) }}>
-            Admin Access
-          </button>
-        </div>
-      </aside>
-
-      <main>
-        <header>
-          <button className="mobile-brand" aria-label="Open menu"><BirdLogo /></button>
-          <div className="header-actions">
-            <button className="icon-button" aria-label="Notifications">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
-              <span className="notification-dot" />
-            </button>
-            <div>
+        <div className="sidebar-actions">
+          {step === 1 && (
+            <>
               <button
-                className="primary-button"
+                className="primary-button btn-primary sidebar-primary-button"
                 onClick={() => setStep(2)}
                 disabled={selectedDestinationIds.length < 2}
                 title={selectedDestinationIds.length < 2 ? 'Select at least 2 places to plan' : undefined}
               >
                 Next: Stays &amp; Dining →
               </button>
-              {selectedDestinationIds.length < 2 && <small className="action-message">Select at least 2 places to continue</small>}
-              {routeError && <small className="action-message" role="alert">{routeError}</small>}
-            </div>
+              {selectedDestinationIds.length < 2 && <small className="sidebar-action-message">Select at least 2 places to continue</small>}
+            </>
+          )}
+          {step === 2 && (
+            <>
+              <button className="primary-button btn-primary sidebar-primary-button" onClick={handlePlanTrip} disabled={isLoadingRoute}>
+                {isLoadingRoute ? 'Calculating route...' : 'Calculate Route →'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="sidebar-back-link"
+              >
+                ← Back to Places
+              </button>
+              {routeError && <small className="sidebar-action-message" role="alert">{routeError}</small>}
+            </>
+          )}
+          {step === 3 && (
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="sidebar-back-link"
+            >
+              ← Back to Stays &amp; Dining
+            </button>
+          )}
+        </div>
+        <div className="sidebar-bottom">
+          <button className="admin-access-link" onClick={() => {
+            if (isAdminSidebarExpanded) return
+            if (isAdminAuthenticated) setIsAdminSidebarExpanded(true)
+            else { setIsLoginModalOpen(true); setLoginError(null) }
+          }}>
+            {isAdminAuthenticated ? 'Expand Admin' : 'Admin Access'}
+          </button>
+        </div>
+      </aside>
+
+      <main>
+        <div
+          className="bg-bird-watermark"
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            right: '5%',
+            top: '50%',
+            transform: 'translateY(-50%) rotate(-8deg)',
+            width: '1400px',
+            height: '1400px',
+            opacity: 0.12,
+            pointerEvents: 'none',
+            userSelect: 'none',
+            zIndex: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {transparentBirdUrl && (
+            <img
+              src={transparentBirdUrl}
+              alt=""
+              draggable={false}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 30px 60px rgba(37, 142, 201, 0.18))',
+              }}
+            />
+          )}
+        </div>
+        <header className="workspace-topbar">
+          <div className="workspace-topbar-actions">
+            <button
+              type="button"
+              className="topbar-icon-btn"
+              aria-label="Notifications"
+              title="Notifications"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            </button>
+            {step === 1 && (
+              <button
+                type="button"
+                className="primary-button topbar-plan-btn"
+                onClick={() => selectedDestinationIds.length >= 2 && setStep(2)}
+                disabled={selectedDestinationIds.length < 2}
+                title={selectedDestinationIds.length < 2 ? 'Select at least 2 places to plan a trip' : 'Continue to Stays & Dining'}
+              >
+                <Icon name="plus" size={16} /> Plan a trip
+              </button>
+            )}
           </div>
         </header>
-
-        {step === 1 ? <div className="content">
+          {step === 1 ? <div className="content">
           <section className="intro">
             <p className="eyebrow">YOUR TRAVEL BOARD</p>
             <h1>Bluebird Vacation Planner</h1>
@@ -448,38 +819,43 @@ export default function App() {
                   className={`destination-card ${isSelected ? 'selected' : ''}`}
                   onClick={() => toggle(destination.id)}
                 >
-                  <img src={destination.image} alt={`${destination.city}, ${destination.country}`} />
+                  <DestinationMainImage destination={destination} />
                   <div className="card-copy">
                     <div className="card-topline"><span className="tag">{destination.tag}</span><span className="duration">{destination.duration}</span></div>
                     <h3>{destination.city}</h3>
                     <p className="country"><Icon name="pin" size={15} />{destination.country}</p>
                     <p className="description">{destination.description}</p>
-                    <div className="location-actions">
-                      <button onClick={(event) => { event.stopPropagation(); handleOpenDining(destination.id, destination.city) }}>
-                        <span>⌁</span> Nearby dining
-                      </button>
-                    </div>
-                    <div className="card-footer"><span>From <strong>{destination.price}</strong></span><span className="details">View trip <Icon name="chevron" size={16} /></span></div>
-                  </div>
-                  <div className="hover-details">
                     <div className="extra-copy">
                       <span><b>Best time</b>{destination.bestTime}</span>
                       <span><b>Don&apos;t miss</b>{destination.highlights}</span>
                     </div>
-                    <div className="mini-gallery">
+                  </div>
+                  <div className="hover-details">
+                    <div
+                      className="mini-gallery"
+                      onClick={(event) => event.stopPropagation()}
+                      onPointerDown={handleGalleryPointerDown}
+                      onPointerMove={handleGalleryPointerMove}
+                      onPointerUp={handleGalleryPointerUp}
+                      onPointerCancel={handleGalleryPointerUp}
+                    >
                       {destination.gallery.map((image, index) => (
                         <img key={image} src={image} alt={`${destination.city} travel view ${index + 1}`} />
                       ))}
                     </div>
                   </div>
-                  <button className="selection-rail" onClick={(event) => { event.stopPropagation(); toggle(destination.id) }} aria-label={`${isSelected ? 'Remove' : 'Add'} ${destination.city}`} aria-pressed={isSelected}>
-                    <span className="check-circle"><Icon name="check" size={16} /></span>
-                    <span>{isSelected ? 'Added' : 'Add'}</span>
-                  </button>
                   <div className="card-weather" aria-label={`Weather: ${weather[destination.id]?.condition ?? 'Loading'}`}>
-                    <span>{weatherIcon(weather[destination.id]?.condition ?? 'Clear')}</span>
-                    <strong>{weather[destination.id] ? `${Math.round(weather[destination.id].temperatureCelsius)}°` : '—'}</strong>
-                    <small>{weather[destination.id]?.condition ?? 'Loading'}</small>
+                    <WeatherIcon condition={weather[destination.id]?.condition ?? 'Clear'} size={48} />
+                    <div className="card-weather-text">
+                      <strong>{weather[destination.id] ? `${Math.round(weather[destination.id].temperatureCelsius)}°` : '—'}</strong>
+                      <small>{weather[destination.id]?.condition ?? 'Loading'}</small>
+                    </div>
+                  </div>
+                  <div className="card-add-strip" aria-hidden="true">
+                    <span className="card-add-circle">
+                      <Icon name="check" size={14} />
+                    </span>
+                    <span className="card-add-label">{isSelected ? 'ADDED' : 'ADD'}</span>
                   </div>
                 </article>
               )
@@ -492,15 +868,16 @@ export default function App() {
             bufferMinutes={bufferMinutes}
             setBufferMinutes={setBufferMinutes}
             nearbyDining={nearbyDining}
-            setNearbyDining={setNearbyDining}
             selectedDining={selectedDining}
             setSelectedDining={setSelectedDining}
+            onOpenDiningGallery={(item) => setDiningGallery({
+              restaurantName: item.restaurantName,
+              images: item.imageUrls?.length ? item.imageUrls : [diningFallbackImage],
+              index: 0,
+            })}
             hotelStays={hotelStays}
             setHotelStays={setHotelStays}
             onBack={() => setStep(1)}
-            onCalculate={handlePlanTrip}
-            isLoading={isLoadingRoute}
-            routeError={routeError}
           />
         ) : (
           <ItineraryView
@@ -514,7 +891,7 @@ export default function App() {
             nearbyDining={nearbyDining}
             hotelStays={hotelStays}
           />
-        )}
+          )}
       </main>
       {isDiningModalOpen && (
         <div className="modal-backdrop" role="presentation" onClick={handleCloseDining}>
@@ -542,6 +919,66 @@ export default function App() {
           </div>
         </div>
       )}
+      {diningGallery && (
+        <div className="gallery-backdrop" role="presentation" onClick={() => setDiningGallery(null)}>
+          <div className="gallery-spread" role="dialog" aria-modal="true" aria-labelledby="dining-gallery-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="dining-gallery-title">{diningGallery.restaurantName}</h2>
+            <button className="gallery-close" onClick={() => setDiningGallery(null)} aria-label="Close restaurant gallery">×</button>
+            {diningGallery.images.length > 1 && (
+              <>
+                <button className="gallery-arrow gallery-prev" onClick={() => setDiningGallery((current) => current && ({ ...current, index: (current.index - 1 + current.images.length) % current.images.length }))} aria-label="Previous restaurant image">‹</button>
+                <button className="gallery-arrow gallery-next" onClick={() => setDiningGallery((current) => current && ({ ...current, index: (current.index + 1) % current.images.length }))} aria-label="Next restaurant image">›</button>
+              </>
+            )}
+            <div className="gallery-stage">
+              {diningGallery.images.map((image, index) => {
+                const total = diningGallery.images.length
+                let diff = index - diningGallery.index
+                if (diff > Math.floor(total / 2)) diff -= total
+                if (diff < -Math.floor(total / 2)) diff += total
+
+                const absDiff = Math.abs(diff)
+                const isCenter = diff === 0
+                const position = isCenter ? 'center' : diff > 0 ? 'right' : 'left'
+                return <button
+                  type="button"
+                  className={`gallery-spread-image ${position}`}
+                  style={{ zIndex: isCenter ? 30 : 20 - absDiff }}
+                  key={`${image}-${index}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (!isCenter) {
+                      setDiningGallery((current) => current && ({ ...current, index }))
+                    }
+                  }}
+                >
+                  <img
+                    src={image}
+                    alt={`${diningGallery.restaurantName} view ${index + 1}`}
+                    draggable={false}
+                  />
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backgroundColor: '#070d17',
+                      opacity: isCenter ? 0 : absDiff === 1 ? 0.42 : 0.65,
+                      transition: 'opacity 0.36s ease',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                </button>
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      {isAdminSidebarExpanded && <AdminDrawer onCollapse={() => setIsAdminSidebarExpanded(false)} onLogout={async () => {
+        await AuthService.logout()
+        setIsAdminAuthenticated(false)
+        setIsAdminSidebarExpanded(false)
+      }} />}
       {isLoginModalOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setIsLoginModalOpen(false)}>
           <div className="modal login-modal" role="dialog" aria-modal="true" aria-labelledby="login-modal-title" onClick={(event) => event.stopPropagation()}>
@@ -589,47 +1026,43 @@ function StaysDiningView({
   bufferMinutes,
   setBufferMinutes,
   nearbyDining,
-  setNearbyDining,
   selectedDining,
   setSelectedDining,
+  onOpenDiningGallery,
   hotelStays,
   setHotelStays,
   onBack,
-  onCalculate,
-  isLoading,
-  routeError,
 }: {
   selectedDestinations: Destination[]
   bufferMinutes: Record<number, number>
   setBufferMinutes: React.Dispatch<React.SetStateAction<Record<number, number>>>
   nearbyDining: Record<number, DiningInsight[]>
-  setNearbyDining: React.Dispatch<React.SetStateAction<Record<number, DiningInsight[]>>>
+  setNearbyDining?: React.Dispatch<React.SetStateAction<Record<number, DiningInsight[]>>>
   selectedDining: Record<number, number>
   setSelectedDining: React.Dispatch<React.SetStateAction<Record<number, number>>>
+  onOpenDiningGallery: (item: DiningInsight) => void
   hotelStays: Record<number, HotelStay>
   setHotelStays: React.Dispatch<React.SetStateAction<Record<number, HotelStay>>>
   onBack: () => void
-  onCalculate: () => void
-  isLoading: boolean
-  routeError: string | null
 }) {
-  useEffect(() => {
-    let cancelled = false
-    Promise.all(selectedDestinations.map(async (destination) => {
-      try {
-        const results = await DiningService.getNearby(destination.id)
-        return [destination.id, results.length > 0 ? results : fallbackDiningByDestination[destination.id] ?? []] as const
-      } catch {
-        return [destination.id, fallbackDiningByDestination[destination.id] ?? []] as const
-      }
-    })).then((results) => {
-      if (!cancelled) {
-        setNearbyDining((current) => ({ ...current, ...Object.fromEntries(results) }))
-      }
-    })
-    return () => { cancelled = true }
-  }, [selectedDestinations, setNearbyDining])
-
+  const diningSliderRef = useRef<HTMLDivElement | null>(null)
+  const diningDragRef = useRef({ startX: 0, startScrollLeft: 0, dragging: false })
+  const handleDiningMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    const slider = event.currentTarget
+    diningSliderRef.current = slider
+    diningDragRef.current = { startX: event.clientX, startScrollLeft: slider.scrollLeft, dragging: false }
+  }
+  const handleDiningMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    const slider = event.currentTarget
+    if (diningSliderRef.current !== slider || event.buttons !== 1) return
+    const distance = event.clientX - diningDragRef.current.startX
+    if (Math.abs(distance) > 3) diningDragRef.current.dragging = true
+    if (diningDragRef.current.dragging) slider.scrollLeft = diningDragRef.current.startScrollLeft - distance
+  }
+  const handleDiningMouseUp = () => {
+    diningSliderRef.current = null
+    window.setTimeout(() => { diningDragRef.current.dragging = false }, 0)
+  }
   return (
     <div className="content itinerary-content">
       <div className="itinerary-head">
@@ -654,25 +1087,56 @@ function StaysDiningView({
                 <span className="input-suffix"><input type="number" min="0" step="5" value={bufferMinutes[destination.id] ?? 15} onChange={(event) => setBufferMinutes((current) => ({ ...current, [destination.id]: Math.max(0, Number(event.target.value)) }))} /> min</span>
               </label>
               <div className="stay-control dining-control">
-                <span><strong>Nearby Dining Selection <small>(Optional)</small></strong><small>Choose a restaurant to visit here</small></span>
+                <div className="dining-label">
+                  <strong>Nearby Dining Selection <small>(Optional)</small></strong>
+                  <small>Choose a restaurant to visit here (drag horizontally to explore)</small>
+                </div>
                 {!dining ? <div className="dining-loading">Finding nearby dining...</div> : (
-                  <div className="dining-options">
+                  <div
+                    className="dining-slider-row"
+                    onMouseDown={handleDiningMouseDown}
+                    onMouseLeave={handleDiningMouseUp}
+                    onMouseUp={handleDiningMouseUp}
+                    onMouseMove={handleDiningMouseMove}
+                  >
                     {dining.map((item) => {
                       const isSelected = selectedDining[destination.id] === item.id
                       return (
-                        <button
-                          type="button"
+                        <article
                           key={item.id}
-                          className={`restaurant-card ${isSelected ? 'selected' : ''}`}
-                          onClick={() => setSelectedDining((current) => ({ ...current, [destination.id]: current[destination.id] === item.id ? 0 : item.id }))}
+                          className={`dining-horizontal-card ${isSelected ? 'selected' : ''}`}
+                          style={{
+                            flex: '0 0 640px',
+                            width: '640px',
+                            minWidth: '640px',
+                            minHeight: '215px',
+                            display: 'grid',
+                            gridTemplateColumns: '230px minmax(0, 1fr)',
+                            borderRadius: '16px',
+                            overflow: 'hidden',
+                            border: 'none',
+                          }}
                         >
-                          <img src={item.imageUrls?.[0] || diningFallbackImage} alt="" />
-                          <span className="restaurant-card-body">
-                            <strong>{item.restaurantName}</strong>
-                            <span className="restaurant-meta"><b>{item.priceRange}</b>{isSelected && <em>Selected ✓</em>}</span>
-                            <small>{item.recommendedDishes}</small>
-                          </span>
-                        </button>
+                          <button type="button" className="dining-slide-image" style={{ width: '230px', height: '100%', minHeight: '215px', padding: 0 }} onClick={(event) => { event.stopPropagation(); onOpenDiningGallery(item) }} aria-label={`View ${item.restaurantName} images`}>
+                            <img src={item.imageUrls?.[0] || diningFallbackImage} alt="" draggable={false} style={{ width: '230px', height: '100%', objectFit: 'cover' }} />
+                          </button>
+                          <button
+                            type="button"
+                            className="dining-slide-info"
+                            style={{ padding: '22px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '10px' }}
+                            onClick={() => setSelectedDining((current) => ({ ...current, [destination.id]: current[destination.id] === item.id ? 0 : item.id }))}
+                          >
+                            <div className="dining-card-topline">
+                              <span className="tag" style={{ fontSize: '13px', fontWeight: 700, padding: '5px 12px', borderRadius: '99px', background: '#edf7fd', color: '#258ec9' }}>{item.priceRange}</span>
+                              <span className="dining-nearby-label" style={{ fontSize: '13px', color: '#7b8d9b', fontWeight: 500 }}>Click photo to preview · Click card to select</span>
+                            </div>
+                            <strong className="dining-card-title" style={{ fontSize: '24px', fontWeight: 700, fontFamily: "'Manrope', sans-serif", color: '#17364d', lineHeight: 1.25, margin: '2px 0' }}>{item.restaurantName}</strong>
+                            <div className="dining-card-dishes" style={{ borderTop: '1px solid rgba(210, 224, 232, 0.8)', paddingTop: '12px', marginTop: '4px' }}>
+                              <b style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.8px', color: '#294b60', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>RECOMMENDED DISHES</b>
+                              <small style={{ fontSize: '15px', lineHeight: 1.5, color: '#4a6274', fontWeight: 500 }}>{item.recommendedDishes}</small>
+                            </div>
+                          </button>
+                        </article>
                       )
                     })}
                   </div>
@@ -686,11 +1150,6 @@ function StaysDiningView({
             </section>
           )
         })}
-      </div>
-      {routeError && <p className="action-message" role="alert">{routeError}</p>}
-      <div className="step-actions">
-        <button className="back-link" onClick={onBack}>← Back to Places</button>
-        <button className="primary-button" onClick={onCalculate} disabled={isLoading}>{isLoading ? 'Calculating route...' : 'Calculate Shortest Route →'}</button>
       </div>
     </div>
   )
@@ -735,6 +1194,19 @@ function ItineraryView({
   }, [nearbyDining, selectedDining])
 
   const mapContainerRef = useRef<HTMLDivElement>(null)
+  const mapInstanceRef = useRef<LeafletMap | null>(null)
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false)
+
+  const getDiningCoordinates = useCallback((item: DiningInsight, destination: Destination): [number, number] => {
+    const dining = item as DiningInsightWithCoordinates
+    if (typeof dining.lat === 'number' && typeof dining.lng === 'number') return [dining.lat, dining.lng]
+    if (typeof dining.latitude === 'number' && typeof dining.longitude === 'number') return [dining.latitude, dining.longitude]
+    if (Array.isArray(dining.coordinates) && dining.coordinates.length === 2) return dining.coordinates
+    if (dining.coordinates && !Array.isArray(dining.coordinates) && typeof dining.coordinates.lat === 'number' && typeof dining.coordinates.lng === 'number') {
+      return [dining.coordinates.lat, dining.coordinates.lng]
+    }
+    return [destination.latitude + 0.008, destination.longitude + 0.008]
+  }, [])
 
   useEffect(() => {
     if (!routeResult || !mapContainerRef.current) return
@@ -771,6 +1243,8 @@ function ItineraryView({
       const coordinates = orderedDestinations.map((destination) => [destination.latitude, destination.longitude] as [number, number])
       if (!coordinates.length) return
       const map = L.map(mapContainerRef.current).setView(coordinates[0], 7)
+      mapInstanceRef.current = map
+      window.setTimeout(() => map.invalidateSize(), 150)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 19,
@@ -786,8 +1260,44 @@ function ItineraryView({
           dining ? `Dining: ${dining}` : '',
           hotel?.enabled ? `Hotel: ${hotel.preference || hotel.customNote || 'Overnight stay'}` : '',
         ].filter(Boolean).join('<br />')
-        const icon = L.divIcon({ className: 'route-marker', html: String(index + 1), iconSize: 34, iconAnchor: [17, 17] })
+        const icon = L.divIcon({
+          className: 'custom-map-pin',
+          iconSize: [0, 0],
+          iconAnchor: [16, 16],
+          html: `<div style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap;transform:translate(-16px,-16px);pointer-events:auto;">
+  <span style="width:32px;height:32px;min-width:32px;min-height:32px;border-radius:50%;background:#0284c7;color:#ffffff;font-family:'Manrope',sans-serif;font-weight:800;font-size:13px;line-height:1;display:inline-flex;align-items:center;justify-content:center;text-align:center;border:2.5px solid #ffffff;box-shadow:0 4px 12px rgba(15,23,42,0.38);padding:0;margin:0;">
+    ${index + 1}
+  </span>
+  <span style="background:rgba(255,255,255,0.96);color:#0f172a;font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:700;line-height:1.2;padding:5px 11px;border-radius:999px;box-shadow:0 4px 12px rgba(15,23,42,0.22);border:1.5px solid #0284c7;">
+    ${destination.city}
+  </span>
+</div>`,
+        })
         L.marker([destination.latitude, destination.longitude], { icon }).addTo(map).bindPopup(details)
+
+        const selectedDiningItem = nearbyDining[destination.id]?.find((item) => item.id === selectedDining[destination.id])
+        if (selectedDiningItem) {
+          const diningCoordinates = getDiningCoordinates(selectedDiningItem, destination)
+          const diningIcon = L.divIcon({
+            className: 'custom-map-pin',
+            iconSize: [0, 0],
+            iconAnchor: [16, 16],
+            html: `<div style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap;transform:translate(-16px,-16px);pointer-events:auto;">
+  <span style="width:32px;height:32px;min-width:32px;min-height:32px;border-radius:50%;background:#f97316;color:#ffffff;font-family:'Manrope',sans-serif;font-weight:800;font-size:13px;line-height:1;display:inline-flex;align-items:center;justify-content:center;text-align:center;border:2.5px solid #ffffff;box-shadow:0 4px 12px rgba(15,23,42,0.38);padding:0;margin:0;">
+    🍴
+  </span>
+  <span style="background:rgba(255,255,255,0.96);color:#0f172a;font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:700;line-height:1.2;padding:5px 11px;border-radius:999px;box-shadow:0 4px 12px rgba(15,23,42,0.22);border:1.5px solid #f97316;">
+    ${selectedDiningItem.restaurantName}
+  </span>
+</div>`,
+          })
+          const diningPopup = [
+            `<strong>${selectedDiningItem.restaurantName} · ${selectedDiningItem.priceRange}</strong>`,
+            `Near Stop ${index + 1}: ${destination.city}`,
+            `<strong>Recommended Dishes</strong>: ${selectedDiningItem.recommendedDishes}`,
+          ].join('<br />')
+          L.marker(diningCoordinates, { icon: diningIcon }).addTo(map).bindPopup(diningPopup)
+        }
       })
 
       let routeCoordinates = coordinates
@@ -803,6 +1313,7 @@ function ItineraryView({
       }
       L.polyline(routeCoordinates, { color: '#0284c7', weight: 5, opacity: 0.9 }).addTo(map)
       map.fitBounds(L.latLngBounds(coordinates), { padding: [32, 32] })
+      window.setTimeout(() => map.invalidateSize(), 150)
 
       return () => map.remove()
     }
@@ -811,9 +1322,25 @@ function ItineraryView({
     loadLeaflet().then((removeMap) => { cleanup = removeMap }).catch(() => undefined)
     return () => {
       cancelled = true
+      mapInstanceRef.current = null
       cleanup?.()
     }
-  }, [routeResult, orderedDestinations, weather, diningName, hotelStays])
+  }, [routeResult, orderedDestinations, weather, diningName, hotelStays, nearbyDining, selectedDining, isMapFullscreen, getDiningCoordinates])
+
+  useEffect(() => {
+    if (!isMapFullscreen) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMapFullscreen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isMapFullscreen])
+
+  useEffect(() => {
+    if (!mapInstanceRef.current) return
+    const resizeTimer = window.setTimeout(() => mapInstanceRef.current?.invalidateSize(), 150)
+    return () => window.clearTimeout(resizeTimer)
+  }, [isMapFullscreen])
 
   return (
     <div className="content itinerary-content">
@@ -840,10 +1367,37 @@ function ItineraryView({
         <div className="empty-state">No active itinerary. Please select destinations and click &apos;Plan a trip&apos;.</div>
       ) : (
         <>
-          <div className="trip-tabs"><button className="active">Route overview</button><button>Day by day</button><button>Bookings</button></div>
-          <div className="route-map-card">
-            <div ref={mapContainerRef} className="route-map" aria-label="Interactive route map" />
-          </div>
+          {!isMapFullscreen && (
+            <div className="route-map-card">
+              <div ref={mapContainerRef} className="route-map" aria-label="Interactive route map" />
+            </div>
+          )}
+          {!isMapFullscreen && (
+            <div className="map-section-header">
+              <div>
+                <h2>Interactive Route Map</h2>
+                <p>Visual overview of your optimized stops and driving path</p>
+              </div>
+              <div className="map-header-actions">
+                <span className="map-legend"><span>🔵 Destination Stop</span><span>🟠 Selected Dining</span></span>
+                <button className="expand-map-button" type="button" onClick={() => setIsMapFullscreen(true)}>⛶ Expand Fullscreen</button>
+              </div>
+            </div>
+          )}
+          {isMapFullscreen && (
+              <div className="map-fullscreen-backdrop" role="dialog" aria-modal="true" aria-label="Fullscreen interactive route map">
+                <button
+                    className="close-fullscreen-x"
+                    type="button"
+                    onClick={() => setIsMapFullscreen(false)}
+                    aria-label="Close Fullscreen Map"
+                    title="Close Fullscreen (Esc)"
+                >
+                  ✕
+                </button>
+                <div ref={mapContainerRef} className="route-map fullscreen-route-map" />
+              </div>
+          )}
           <section className="route-card">
             <div className="route-card-head"><div><h2>Step-by-step route</h2><p>Stops are ordered for the smoothest journey.</p></div><span>Auto-optimized</span></div>
             <div className="route-stops">
@@ -859,7 +1413,11 @@ function ItineraryView({
                       <div>
                         <small>Stop {index + 1}</small>
                         <h3>{destination.city}</h3>
-                        <p>{destination.country} · {weather[destination.id] ? `${weatherIcon(weather[destination.id].condition)} ${weather[destination.id].condition}, ${Math.round(weather[destination.id].temperatureCelsius)}°C` : 'Weather unavailable'} · {bufferMinutes[destination.id] ?? 15} mins exploring</p>
+                        <p>
+                          {destination.country} · {weather[destination.id] ? (
+                            <><WeatherIcon condition={weather[destination.id].condition} size={18} /> {weather[destination.id].condition}, {Math.round(weather[destination.id].temperatureCelsius)}°C</>
+                          ) : 'Weather unavailable'} · {bufferMinutes[destination.id] ?? 15} mins exploring
+                        </p>
                         {dining && <span className="travel-time">Dining: {dining}</span>}
                         {hotel?.enabled && <span className="travel-time">Overnight: {hotel.preference === 'Custom preference' ? hotel.customNote || hotel.preference : hotel.preference || 'Preferred hotel stay'}</span>}
                       </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { getBackendUrl } from '@/src/lib/backend-url'
 
 interface LoginResponse {
   token: string
@@ -7,11 +8,9 @@ interface LoginResponse {
   username: string
 }
 
-const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
-
 export async function POST(request: Request): Promise<NextResponse> {
   const credentials = await request.json()
-  const backendResponse = await fetch(`${backendUrl}/api/auth/login`, {
+  const backendResponse = await fetch(`${getBackendUrl()}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(credentials),

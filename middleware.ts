@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest): NextResponse {
-  if (!request.cookies.get('adminToken')) {
+  const token = request.cookies.get('adminToken')?.value
+  if (!token || token.trim().length === 0) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
