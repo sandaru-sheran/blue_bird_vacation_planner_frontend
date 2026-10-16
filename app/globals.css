@@ -1214,26 +1214,75 @@ main > :not(.bg-bird-watermark) { position: relative; z-index: 1; }
 .trip-summary span { font-size: 15px; text-transform: uppercase; letter-spacing: .5px; color: #64748b; }
 .trip-summary strong { font: 700 29px 'Manrope'; color: #0f172a; }
 
-.dining-control { display: block; }
-.dining-label { margin-bottom: 12px; }
-.dining-label strong, .dining-label small { display: block; }
-.dining-label strong { color: #29485e; font-size: 13px; }
-.dining-label strong small { display: inline; color: #8a9aa7; font-size: 11px; font-weight: 500; }
-.dining-label > small { margin-top: 5px; color: #8a9aa7; font-size: 12px; }
+/* ==========================================================================
+   DINING COMPONENT ONLY (Isolated from Step 1 & other controls)
+   ========================================================================== */
+
+.stay-card .stay-control.dining-control {
+  display: block !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  contain: inline-size; /* Prevents 640px dining cards from stretching .stay-card past the red line */
+  box-sizing: border-box !important;
+}
+
+.dining-label {
+  margin-bottom: 12px;
+}
+
+.dining-label strong,
+.dining-label small {
+  display: block;
+}
+
+.dining-label strong {
+  color: #29485e;
+  font-size: 13px;
+}
+
+.dining-label strong small {
+  display: inline;
+  color: #8a9aa7;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dining-label > small {
+  margin-top: 5px;
+  color: #8a9aa7;
+  font-size: 12px;
+}
+
 .dining-slider-row {
   display: flex;
   flex-wrap: nowrap;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   gap: 16px;
   overflow-x: auto;
   overflow-y: hidden;
+  box-sizing: border-box;
+  padding-bottom: 12px;
   cursor: grab;
   user-select: none;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.dining-slider-row::-webkit-scrollbar { display: none; }
-.dining-slider-row:active { cursor: grabbing; }
+
+.dining-slider-row::-webkit-scrollbar {
+  display: none;
+}
+
+.dining-slider-row:active,
+.dining-slider-row.dragging {
+  cursor: grabbing;
+}
+
 .dining-horizontal-card {
   flex: 0 0 640px !important;
   width: 640px !important;
@@ -1246,12 +1295,14 @@ main > :not(.bg-bird-watermark) { position: relative; z-index: 1; }
   border-radius: 16px !important;
   background: #f8fbfd;
   text-align: left;
-  transition: transform .2s, box-shadow .2s, background .2s;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 }
+
 .dining-horizontal-card.selected {
-  background: linear-gradient(270deg, #9fd9b9 0%, #d4efdf 17%, rgba(231, 247, 238, .82) 38%, #fff 72%);
-  box-shadow: 0 10px 28px rgba(38, 133, 86, .13);
+  background: linear-gradient(270deg, #9fd9b9 0%, #d4efdf 17%, rgba(231, 247, 238, 0.82) 38%, #fff 72%);
+  box-shadow: 0 10px 28px rgba(38, 133, 86, 0.13);
 }
+
 .dining-slide-image,
 .dining-slide-info {
   grid-row: 1;
@@ -1260,6 +1311,7 @@ main > :not(.bg-bird-watermark) { position: relative; z-index: 1; }
   outline: 0;
   text-align: left;
 }
+
 .dining-slide-image {
   grid-column: 1;
   width: 230px !important;
@@ -1268,6 +1320,7 @@ main > :not(.bg-bird-watermark) { position: relative; z-index: 1; }
   padding: 0;
   cursor: zoom-in;
 }
+
 .dining-slide-image img {
   width: 230px !important;
   height: 100% !important;
@@ -1276,6 +1329,7 @@ main > :not(.bg-bird-watermark) { position: relative; z-index: 1; }
   object-position: center center !important;
   pointer-events: none;
 }
+
 .dining-slide-info {
   grid-column: 2;
   display: flex;
@@ -1286,7 +1340,13 @@ main > :not(.bg-bird-watermark) { position: relative; z-index: 1; }
   background: transparent;
   cursor: pointer;
 }
-.dining-card-topline { display: flex; align-items: center; gap: 10px; }
+
+.dining-card-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .dining-card-topline .tag {
   padding: 5px 12px !important;
   border-radius: 99px !important;
@@ -1295,28 +1355,37 @@ main > :not(.bg-bird-watermark) { position: relative; z-index: 1; }
   font-size: 13px !important;
   font-weight: 700 !important;
 }
-.dining-nearby-label { color: #7b8d9b !important; font-size: 13px !important; font-weight: 500 !important; }
+
+.dining-nearby-label {
+  color: #7b8d9b !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
 .dining-card-title {
   margin: 2px 0 !important;
   color: #17364d !important;
   font: 700 24px 'Manrope', sans-serif !important;
-  letter-spacing: -.4px;
+  letter-spacing: -0.4px;
   line-height: 1.25;
 }
+
 .dining-card-dishes {
-  border-top: 1px solid rgba(210, 224, 232, .8) !important;
+  border-top: 1px solid rgba(210, 224, 232, 0.8) !important;
   padding-top: 12px !important;
   margin-top: 4px !important;
 }
+
 .dining-card-dishes b {
   display: block;
   color: #294b60 !important;
   font-size: 12px !important;
   font-weight: 700 !important;
-  letter-spacing: .8px !important;
+  letter-spacing: 0.8px !important;
   margin-bottom: 6px !important;
   text-transform: uppercase !important;
 }
+
 .dining-card-dishes small {
   display: -webkit-box;
   overflow: hidden;
@@ -1527,7 +1596,7 @@ main {
 .content,
 .itinerary-content {
   margin-left: 160px !important;
-  margin-right: 260px !important;
+  margin-right: 600px !important;
   width: calc(100% - 500px) !important; /* 100% minus (160px left + 160px right) */
   max-width: none !important;           /* Removes the cap that broke the right side */
   padding: 36px 0 80px !important;
@@ -1714,56 +1783,465 @@ main:has(.map-fullscreen-backdrop) > :not(.bg-bird-watermark) {
 /* Weather icon sizing and placement */
 .card-weather {
   position: absolute;
-  top: 22px;
-  right: clamp(76px, 8vw, 104px);
+  top: 20px;
+  right: clamp(24px, 4vw, 48px);
   z-index: 2;
   display: flex;
-  align-items: center;
+  align-items: center; /* Aligns text and icon vertically */
   justify-content: flex-end;
-  gap: 10px;
+  gap: 16px;          /* Space between text and icon */
   width: auto;
   padding: 0;
   margin: 0;
   overflow: visible;
 }
-
-.weather-icon-wrapper {
-  display: flex;
-  flex: 0 0 56px;
+.css-weather-wrapper {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  position: relative;
+  flex-shrink: 0;
   overflow: visible;
 }
 
-.weather-icon {
-  display: block;
-  width: 56px;
-  height: 56px;
-  max-width: none;
-  object-fit: contain;
-  object-position: center;
-  overflow: visible;
-  flex-shrink: 0;
+.css-weather-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 88px;  /* Base artboard size */
+  height: 88px; /* Base artboard size */
+  transform-origin: top left;
+  pointer-events: none;
 }
 
 .card-weather-text {
   display: flex;
   flex-direction: column;
+  justify-content: space-between; /* Pushes condition to the top and temperature to the bottom */
   align-items: flex-start;
+  height: 100%; /* Ensures it fills the height of the weather container */
   line-height: 1.15;
 }
 
 .card-weather strong {
   color: #17364d;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
-}
+  margin-top: auto;
+}/* Keeps the temperature anchored at the bottom */
 
 .card-weather small {
-  margin-top: 2px;
+  margin-bottom: 2px;
   color: #718594;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   text-align: left;
+}
+
+.wx-stage {
+  width: 120px;
+  height: 120px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Pause animations globally when toggled */
+.wx-paused .wx-stage *,
+.wx-paused .wx-stage *::before,
+.wx-paused .wx-stage *::after {
+  animation-play-state: paused !important;
+}
+
+/* --------------------------------------------------------------------------
+   1. SUNNY (Glowing Orb + Conic CSS Rays)
+   -------------------------------------------------------------------------- */
+.wx-sunny {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fef08a 0%, #f59e0b 100%);
+  box-shadow:
+          0 0 28px rgba(245, 158, 11, 0.65),
+          inset 0 -4px 8px rgba(217, 119, 6, 0.4);
+  animation: wx-sun-pulse 3.2s infinite ease-in-out;
+}
+
+.wx-sunny::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+          from 0deg,
+          rgba(251, 191, 36, 0.45) 0deg 10deg,
+          transparent 10deg 30deg
+  );
+  -webkit-mask: radial-gradient(transparent 56%, #000 58%);
+  mask: radial-gradient(transparent 56%, #000 58%);
+  animation: wx-sun-spin 18s infinite linear;
+}
+
+/* --------------------------------------------------------------------------
+   SHARED CLOUD BASE (Used across Cloudy, Rainy, Storm, Snow, Wind)
+   -------------------------------------------------------------------------- */
+.wx-cloud {
+  width: 72px;
+  height: 28px;
+  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
+  border-radius: 28px;
+  position: relative;
+  box-shadow:
+          0 10px 20px rgba(15, 23, 42, 0.18),
+          inset 0 -3px 6px rgba(148, 163, 184, 0.35);
+  z-index: 2;
+}
+
+.wx-cloud::before,
+.wx-cloud::after {
+  content: "";
+  position: absolute;
+  background: inherit;
+  border-radius: 50%;
+}
+
+.wx-cloud::before {
+  width: 38px;
+  height: 38px;
+  top: -20px;
+  left: 10px;
+}
+
+.wx-cloud::after {
+  width: 28px;
+  height: 28px;
+  top: -12px;
+  right: 10px;
+}
+
+/* Dark Cloud Variant */
+.wx-cloud.wx-dark {
+  background: linear-gradient(180deg, #94a3b8 0%, #475569 100%);
+  box-shadow:
+          0 10px 20px rgba(2, 6, 23, 0.32),
+          inset 0 -3px 6px rgba(30, 41, 59, 0.6);
+}
+
+/* --------------------------------------------------------------------------
+   2. PARTLY CLOUDY (Peeking Warm Sun + Floating Cloud)
+   -------------------------------------------------------------------------- */
+.wx-partly-cloudy {
+  position: relative;
+  width: 90px;
+  height: 75px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.wx-partly-cloudy .wx-small-sun {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fde047, #f59e0b);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.65);
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 1;
+  animation: wx-sun-pulse 3.5s infinite ease-in-out;
+}
+
+.wx-partly-cloudy .wx-cloud {
+  animation: wx-float 4s infinite ease-in-out;
+}
+
+/* --------------------------------------------------------------------------
+   3. CLOUDY / OVERCAST (Layered Drifting Clouds)
+   -------------------------------------------------------------------------- */
+.wx-overcast {
+  position: relative;
+  width: 96px;
+  height: 75px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.wx-overcast .wx-cloud-back {
+  width: 58px;
+  height: 22px;
+  background: linear-gradient(180deg, #cbd5e1 0%, #64748b 100%);
+  border-radius: 22px;
+  position: absolute;
+  top: 16px;
+  right: 4px;
+  z-index: 1;
+  opacity: 0.88;
+  animation: wx-drift-right 4.5s infinite ease-in-out;
+}
+
+.wx-overcast .wx-cloud-back::before,
+.wx-overcast .wx-cloud-back::after {
+  content: "";
+  position: absolute;
+  background: inherit;
+  border-radius: 50%;
+}
+
+.wx-overcast .wx-cloud-back::before {
+  width: 30px;
+  height: 30px;
+  top: -15px;
+  left: 8px;
+}
+
+.wx-overcast .wx-cloud-back::after {
+  width: 22px;
+  height: 22px;
+  top: -9px;
+  right: 8px;
+}
+
+.wx-overcast .wx-cloud {
+  animation: wx-float 4s infinite ease-in-out;
+}
+
+/* --------------------------------------------------------------------------
+   4. RAINY (Dark Cloud + Box-Shadow Multi-Raindrops)
+   -------------------------------------------------------------------------- */
+.wx-rainy {
+  position: relative;
+  width: 90px;
+  height: 92px;
+  display: flex;
+  justify-content: center;
+  padding-top: 22px;
+}
+
+.wx-rainy .wx-raindrops {
+  position: absolute;
+  top: 52px;
+  left: 26px;
+  width: 4px;
+  height: 13px;
+  background: #38bdf8;
+  border-radius: 4px;
+  box-shadow:
+          16px 6px 0 #38bdf8,
+          32px -2px 0 #38bdf8;
+  animation: wx-rain-fall 0.95s infinite linear;
+  z-index: 1;
+}
+
+.wx-rainy .wx-raindrops::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 8px;
+  width: 4px;
+  height: 11px;
+  background: #7dd3fc;
+  border-radius: 4px;
+  box-shadow: 16px 5px 0 #7dd3fc;
+  animation: wx-rain-fall 0.95s infinite linear 0.45s;
+}
+
+/* --------------------------------------------------------------------------
+   5. THUNDERSTORM (Dark Storm Cloud + CSS Clip-Path Lightning + Rain)
+   -------------------------------------------------------------------------- */
+.wx-thunderstorm {
+  position: relative;
+  width: 90px;
+  height: 96px;
+  display: flex;
+  justify-content: center;
+  padding-top: 20px;
+}
+
+.wx-thunderstorm .wx-cloud.wx-dark {
+  background: linear-gradient(180deg, #64748b 0%, #334155 100%);
+  animation: wx-storm-rumble 4s infinite ease-in-out;
+}
+
+.wx-thunderstorm .wx-bolt {
+  position: absolute;
+  top: 46px;
+  left: 38px;
+  width: 18px;
+  height: 34px;
+  background: linear-gradient(180deg, #fef08a 0%, #f59e0b 100%);
+  clip-path: polygon(55% 0%, 10% 54%, 48% 54%, 25% 100%, 95% 40%, 52% 40%);
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.9));
+  z-index: 3;
+  animation: wx-lightning-flash 2.6s infinite;
+}
+
+.wx-thunderstorm .wx-raindrops {
+  position: absolute;
+  top: 52px;
+  left: 22px;
+  width: 3px;
+  height: 11px;
+  background: #38bdf8;
+  border-radius: 4px;
+  box-shadow: 38px 4px 0 #38bdf8;
+  animation: wx-rain-fall 0.85s infinite linear;
+  z-index: 1;
+}
+
+/* --------------------------------------------------------------------------
+   6. SNOWY (Cloud + Gently Drifting Pure CSS Snowflakes)
+   -------------------------------------------------------------------------- */
+.wx-snowy {
+  position: relative;
+  width: 90px;
+  height: 92px;
+  display: flex;
+  justify-content: center;
+  padding-top: 20px;
+}
+
+.wx-snowy .wx-flakes,
+.wx-snowy .wx-flakes::before,
+.wx-snowy .wx-flakes::after {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+}
+
+.wx-snowy .wx-flakes {
+  top: 56px;
+  left: 26px;
+  animation: wx-snow-drift 2.4s infinite ease-in-out;
+  z-index: 1;
+}
+
+.wx-snowy .wx-flakes::before {
+  content: "";
+  left: 16px;
+  top: -4px;
+  width: 6px;
+  height: 6px;
+  animation: wx-snow-drift 2.4s infinite ease-in-out 0.7s;
+}
+
+.wx-snowy .wx-flakes::after {
+  content: "";
+  left: 32px;
+  top: 2px;
+  width: 7px;
+  height: 7px;
+  animation: wx-snow-drift 2.4s infinite ease-in-out 1.4s;
+}
+
+/* --------------------------------------------------------------------------
+   7. WINDY (Floating Cloud + Sleek Animated CSS Wind Streaks)
+   -------------------------------------------------------------------------- */
+.wx-windy {
+  position: relative;
+  width: 96px;
+  height: 88px;
+  display: flex;
+  justify-content: center;
+  padding-top: 18px;
+}
+
+.wx-windy .wx-wind-lines {
+  position: absolute;
+  top: 48px;
+  left: 10px;
+  width: 56px;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, #38bdf8, #e0f2fe);
+  border-radius: 4px;
+  z-index: 3;
+  animation: wx-wind-gust 2.1s infinite ease-in-out;
+}
+
+.wx-windy .wx-wind-lines::before,
+.wx-windy .wx-wind-lines::after {
+  content: "";
+  position: absolute;
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, transparent, #7dd3fc, #f1f5f9);
+}
+
+.wx-windy .wx-wind-lines::before {
+  width: 44px;
+  top: -11px;
+  left: 18px;
+  animation: wx-wind-gust 2.1s infinite ease-in-out 0.35s;
+}
+
+.wx-windy .wx-wind-lines::after {
+  width: 48px;
+  top: 10px;
+  left: 8px;
+  animation: wx-wind-gust 2.1s infinite ease-in-out 0.7s;
+}
+
+/* --------------------------------------------------------------------------
+   8. CLEAR NIGHT (Inset Box-Shadow Crescent Moon + Twinkling CSS Stars)
+   -------------------------------------------------------------------------- */
+.wx-night {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wx-night .wx-moon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  box-shadow: inset -14px -6px 0 0 #fde047;
+  filter: drop-shadow(0 0 14px rgba(253, 224, 71, 0.45));
+  transform: rotate(-15deg);
+  animation: wx-moon-tilt 4.5s infinite ease-in-out;
+}
+
+.wx-night .wx-stars,
+.wx-night .wx-stars::before,
+.wx-night .wx-stars::after {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  background: #fef9c3;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #fef08a;
+}
+
+.wx-night .wx-stars {
+  top: 14px;
+  right: 16px;
+  animation: wx-twinkle 2.2s infinite ease-in-out;
+}
+
+.wx-night .wx-stars::before {
+  content: "";
+  top: 22px;
+  right: -8px;
+  width: 4px;
+  height: 4px;
+  animation: wx-twinkle 2.2s infinite ease-in-out 0.8s;
+}
+
+.wx-night .wx-stars::after {
+  content: "";
+  top: -6px;
+  right: 26px;
+  width: 3px;
+  height: 3px;
+  animation: wx-twinkle 2.2s infinite ease-in-out 1.5s;
 }
