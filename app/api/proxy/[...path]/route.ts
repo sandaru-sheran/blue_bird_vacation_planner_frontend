@@ -6,11 +6,19 @@ type RouteContext = {
   params: Promise<{ path: string[] }>
 }
 
+// Define the root paths that are public in your Spring Boot SecurityConfig
+const PUBLIC_PATHS = ['destinations', 'weather', 'dining', 'route']
+
 async function proxyRequest(request: Request, context: RouteContext): Promise<NextResponse> {
   const { path } = await context.params
   const requestUrl = new URL(request.url)
   const token = (await cookies()).get('adminToken')?.value
-  if (!token) {
+
+  // Check if the requested path starts with a public endpoint
+  const isPublicPath = PUBLIC_PATHS.some(publicPath => path[0] === publicPath)
+
+  // Block only if there is no token AND it's a protected route
+  if (!token && !isPublicPath) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -18,7 +26,11 @@ async function proxyRequest(request: Request, context: RouteContext): Promise<Ne
   headers.delete('host')
   headers.delete('content-length')
   headers.delete('cookie')
-  headers.set('Authorization', `Bearer ${token}`)
+
+  // Only attach the Authorization header if a token actually exists
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
 
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer()
   const backendResponse = await fetch(`${getBackendUrl()}/api/${path.join('/')}${requestUrl.search}`, {
